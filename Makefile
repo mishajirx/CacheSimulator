@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -g -Wall -pedantic -std=c++17
+CXXFLAGS = -g -Wall -Wextra -pedantic -std=c++17
 
 # Add any additional source files here
 SRCS = main.cpp
@@ -30,6 +30,6 @@ depend.mak :
 	touch $@
 
 clean :
-	rm -f csim *.o
+	-del /f csim.exe *.o 2>nul || rm -f csim *.o
 
 include depend.mak
