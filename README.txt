@@ -1,5 +1,3 @@
-Misha Zhernevskii
-
 # Cache Simulator Project
 
 ## Experiments:
