@@ -18,12 +18,12 @@ struct Set {
 class CacheSimulator {
 private:
   uint32_t num_sets;
-  uint32_t num_blocks;
-  uint32_t num_bytes;
+  uint32_t num_slots; // blocks (slots) per set
+  uint32_t num_bytes; // bytes per block
   std::string write_alloc;
   std::string write_policy;
   std::string eviction;
-  std::vector<Set> sets;
+  std::vector<Set> cache;
   uint32_t load_hits;
   uint32_t load_misses;
   uint32_t store_hits;
@@ -36,15 +36,15 @@ private:
 public:
   CacheSimulator(uint32_t s, uint32_t b, uint32_t by, const std::string &wa,
                  const std::string &wp, const std::string &ev)
-      : num_sets(s), num_blocks(b), num_bytes(by), write_alloc(wa),
+      : num_sets(s), num_slots(b), num_bytes(by), write_alloc(wa),
         write_policy(wp), eviction(ev), load_hits(0), load_misses(0),
         store_hits(0), store_misses(0), total_loads(0), total_stores(0),
         total_cycles(0), ts(1) {
-    sets.resize(num_sets);
+    cache.resize(num_sets);
     for (uint32_t i = 0; i < num_sets; ++i) {
-      sets[i].slots.resize(num_blocks);
-      for (uint32_t j = 0; j < num_blocks; ++j) {
-        sets[i].slots[j] = {0, false, false, 0, 0};
+      cache[i].slots.resize(num_slots);
+      for (uint32_t j = 0; j < num_slots; ++j) {
+        cache[i].slots[j] = {0, false, false, 0, 0};
       }
     }
   }
@@ -62,8 +62,8 @@ public:
     bool hit = false;
     int hit_idx = -1;
 
-    for (uint32_t i = 0; i < num_blocks; ++i) {
-      if (sets[index].slots[i].valid && sets[index].slots[i].tag == tag) {
+    for (uint32_t i = 0; i < num_slots; ++i) {
+      if (cache[index].slots[i].valid && cache[index].slots[i].tag == tag) {
         hit = true;
         hit_idx = i;
         break;
@@ -76,14 +76,14 @@ public:
       else
         store_hits++;
 
-      sets[index].slots[hit_idx].access_ts = ts++;
+      cache[index].slots[hit_idx].access_ts = ts++;
       total_cycles += 1;
 
       if (type == 's') {
         if (write_policy == "write-through") {
           total_cycles += 100;
         } else {
-          sets[index].slots[hit_idx].dirty = true;
+          cache[index].slots[hit_idx].dirty = true;
         }
       }
     } else {
@@ -96,8 +96,8 @@ public:
         total_cycles += 101;
       } else {
         int replace_idx = -1;
-        for (uint32_t i = 0; i < num_blocks; ++i) {
-          if (!sets[index].slots[i].valid) {
+        for (uint32_t i = 0; i < num_slots; ++i) {
+          if (!cache[index].slots[i].valid) {
             replace_idx = i;
             break;
           }
@@ -105,31 +105,31 @@ public:
 
         if (replace_idx == -1) {
           replace_idx = 0;
-          for (uint32_t i = 1; i < num_blocks; ++i) {
+          for (uint32_t i = 1; i < num_slots; ++i) {
             if (eviction == "lru") {
-              if (sets[index].slots[i].access_ts <
-                  sets[index].slots[replace_idx].access_ts) {
+              if (cache[index].slots[i].access_ts <
+                  cache[index].slots[replace_idx].access_ts) {
                 replace_idx = i;
               }
             } else {
-              if (sets[index].slots[i].load_ts <
-                  sets[index].slots[replace_idx].load_ts) {
+              if (cache[index].slots[i].load_ts <
+                  cache[index].slots[replace_idx].load_ts) {
                 replace_idx = i;
               }
             }
           }
-          if (sets[index].slots[replace_idx].dirty) {
+          if (cache[index].slots[replace_idx].dirty) {
             total_cycles += 100 * (num_bytes / 4);
           }
         }
 
         total_cycles += 100 * (num_bytes / 4);
 
-        sets[index].slots[replace_idx].valid = true;
-        sets[index].slots[replace_idx].tag = tag;
-        sets[index].slots[replace_idx].load_ts = ts;
-        sets[index].slots[replace_idx].access_ts = ts;
-        sets[index].slots[replace_idx].dirty = false;
+        cache[index].slots[replace_idx].valid = true;
+        cache[index].slots[replace_idx].tag = tag;
+        cache[index].slots[replace_idx].load_ts = ts;
+        cache[index].slots[replace_idx].access_ts = ts;
+        cache[index].slots[replace_idx].dirty = false;
         ts++;
 
         total_cycles += 1;
@@ -138,7 +138,7 @@ public:
           if (write_policy == "write-through") {
             total_cycles += 100;
           } else {
-            sets[index].slots[replace_idx].dirty = true;
+            cache[index].slots[replace_idx].dirty = true;
           }
         }
       }
@@ -160,16 +160,16 @@ bool is_power_of_two(uint32_t n) { return n > 0 && (n & (n - 1)) == 0; }
 
 int main(int argc, char **argv) {
   if (argc != 7) {
-    std::cerr << "Usage: ./csim <sets> <blocks> <bytes> "
+    std::cerr << "Usage: ./csim <cache> <blocks> <bytes> "
                  "<write-allocate|no-write-allocate> "
                  "<write-through|write-back> <lru|fifo>\n";
     return 1;
   }
 
-  uint32_t num_sets, num_blocks, num_bytes;
+  uint32_t num_sets, num_slots, num_bytes;
   try {
     num_sets = std::stoul(argv[1]);
-    num_blocks = std::stoul(argv[2]);
+    num_slots = std::stoul(argv[2]);
     num_bytes = std::stoul(argv[3]);
   } catch (...) {
     std::cerr << "Invalid numeric arguments\n";
@@ -181,11 +181,11 @@ int main(int argc, char **argv) {
   std::string eviction = argv[6];
 
   if (!is_power_of_two(num_sets)) {
-    std::cerr << "Invalid number of sets\n";
+    std::cerr << "Invalid number of cache\n";
     return 1;
   }
-  if (!is_power_of_two(num_blocks)) {
-    std::cerr << "Invalid number of blocks\n";
+  if (!is_power_of_two(num_slots)) {
+    std::cerr << "Invalid number of blocks\n ";
     return 1;
   }
   if (num_bytes < 4 || !is_power_of_two(num_bytes)) {
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  CacheSimulator simulator(num_sets, num_blocks, num_bytes, write_alloc,
+  CacheSimulator simulator(num_sets, num_slots, num_bytes, write_alloc,
                            write_policy, eviction);
 
   char type;
