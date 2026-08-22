@@ -7,8 +7,8 @@ struct Slot {
   uint32_t tag;
   bool valid;
   bool dirty;
-  uint32_t load_ts;
-  uint32_t access_ts;
+  uint64_t load_ts;
+  uint64_t access_ts;
 };
 
 struct Set {
@@ -24,13 +24,13 @@ private:
   std::string write_policy;
   std::string eviction;
   std::vector<Set> cache;
-  uint32_t load_hits;
-  uint32_t load_misses;
-  uint32_t store_hits;
-  uint32_t store_misses;
-  uint32_t total_loads;
-  uint32_t total_stores;
-  uint32_t total_cycles;
+  uint64_t load_hits;
+  uint64_t load_misses;
+  uint64_t store_hits;
+  uint64_t store_misses;
+  uint64_t total_loads;
+  uint64_t total_stores;
+  uint64_t total_cycles;
   uint64_t ts;
 
 public:
@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
 
   char type;
   std::string address;
-  int ignore;
+  std::string ignore;
   while (std::cin >> type >> address >> ignore) {
     if (type != 'l' && type != 's')
       continue;
